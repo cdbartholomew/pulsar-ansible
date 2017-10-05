@@ -1,0 +1,218 @@
+- name: Create instance(s)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tags: setup
+  vars_files:
+    - vars/gce.yaml
+    - vars/credentials.yaml
+  tasks:
+    - name: Launch worker instances
+      gce:
+        zone: "{{ item.zone }}"
+        instance_names: "{{ item.workers }}"
+        preemptible: true
+        machine_type: "{{ machine_type }}"
+        image: "{{ image }}"
+        service_account_email: "{{ service_account_email }}"
+        credentials_file: "{{ credentials_file }}"
+        project_id: "{{ project_id }}"
+      register: nodes
+      with_items: "{{ topology }}"
+
+    - name: Ensure all instances are started
+      gce:
+        zone: "{{ item.zone }}"
+        instance_names: "{{ item.workers }}"
+        service_account_email: "{{ service_account_email }}"
+        credentials_file: "{{ credentials_file }}"
+        project_id: "{{ project_id }}"
+        state: started
+      with_items: "{{ topology }}"
+
+    - name: Wait for SSH to come up
+      wait_for: host={{ item.1.public_ip }} port=22 timeout=60
+      with_subelements:
+        - "{{ nodes.results }}"
+        - instance_data
+
+    - name: Add host to group (zk)
+      add_host:
+        hostname: "{{ item.1.public_ip }}"
+        groups:
+          - zk
+        zone: "{{ item.1.zone }}"
+        instance_data: "{{ item.1 }}"
+        pulsar: zk
+      with_subelements:
+        - "{{ nodes.results }}"
+        - instance_data
+      when: item.1.name | match("zk.*")
+
+    - name: Add host to group (pulsar)
+      add_host:
+        hostname: "{{ item.1.public_ip }}"
+        groups:
+          - pulsar
+        zone: "{{ item.1.zone }}"
+        instance_data: "{{ item.1 }}"
+        type: pulsar
+      with_subelements:
+        - "{{ nodes.results }}"
+        - instance_data
+      when: item.1.name | match("pulsar.*")
+
+- name: Common setup for all hosts
+  hosts: all
+  connection: ssh
+  tags: setup
+  become: true
+  tasks:
+    - name: Install useful packages
+      apt:
+        update_cache: yes
+        name: "{{ item }}"
+      with_items:
+        - openjdk-8-jdk
+        - emacs-nox
+        - netcat
+        - less
+    - name: Cleanup
+      systemd:
+        state: stopped
+        daemon_reload: yes
+        name: "{{ item }}"
+      with_items:
+        - zookeeper-local
+        - zookeeper-global
+        - bookkeeper
+        - pulsar
+      ignore_errors: yes
+    - file:
+        path: "/opt/pulsar"
+        state: absent
+    - name: Figure out local leads
+      group_by:
+        key: "{{ zone }}"
+    - set_fact:
+        localzk: "{{ groups[zone]|intersect(groups.zk) }}"
+        localpulsar: "{{ groups[zone]|intersect(groups.pulsar) }}"
+        localzkstr: "{{ groups[zone]|intersect(groups.zk)|map('extract', hostvars, ['instance_data', 'private_ip'])|map('regex_replace', '(.*)', '\\1:2181') | join(',') }}"
+        globalzkstr: "{{ groups.zk|map('extract', hostvars, ['instance_data', 'private_ip'])|map('regex_replace', '(.*)', '\\1:2184') | join(',') }}"
+    - name: Download and extract pulsar
+      file:
+        path: "/opt/pulsar"
+        state: directory
+    - get_url:
+        url: https://dist.apache.org/repos/dist/dev/incubator/pulsar/pulsar-1.20.0-incubating-candidate-0/apache-pulsar-1.20.0-incubating-bin.tar.gz
+        dest: /tmp/pulsar.tgz
+    - command: tar --strip-components=1 -xvf /tmp/pulsar.tgz
+      args:
+        chdir: /opt/pulsar
+
+- name: Setup zookeeper
+  hosts: zk
+  connection: ssh
+  tags: setup
+  become: true
+  tasks:
+    - set_fact:
+        zid: "{{ groups['zk'].index(inventory_hostname) }}"
+    - file:
+        path: "/opt/pulsar/{{ item }}"
+        state: directory
+      with_items:
+        - data/global-zookeeper
+        - data/zookeeper
+    - template:
+        src: "templates/zoo.cfg.global.j2"
+        dest: "/opt/pulsar/conf/global_zookeeper.conf"
+    - template:
+        src: "templates/zoo.cfg.local.j2"
+        dest: "/opt/pulsar/conf/zookeeper.conf"
+    - template:
+        src: templates/myid.j2
+        dest: "/opt/pulsar/data/global-zookeeper/myid"
+    - template:
+        src: templates/myid.j2
+        dest: "/opt/pulsar/data/zookeeper/myid"
+    - template:
+        src: "templates/zookeeper.service.{{ item }}.j2"
+        dest: "/etc/systemd/system/zookeeper-{{ item }}.service"
+      with_items:
+        - local
+        - global
+    - systemd:
+        state: restarted
+        daemon_reload: yes
+        name: "zookeeper-{{ item }}"
+      with_items:
+        - local
+        - global
+    - command: >
+        bin/pulsar initialize-cluster-metadata --cluster {{ zone }}
+        --zookeeper {{ instance_data.private_ip }}:2181 
+        --global-zookeeper {{ instance_data.private_ip }}:2184
+        --web-service-url http://{{ hostvars[localpulsar[0]].instance_data.private_ip }}:8080/
+        --web-service-url-tls https://{{ hostvars[localpulsar[0]].instance_data.private_ip }}:8443/
+        --broker-service-url pulsar://{{ hostvars[localpulsar[0]].instance_data.private_ip }}:6650/
+        --broker-service-url-tls pulsar+ssl://{{ hostvars[localpulsar[0]].instance_data.private_ip }}:6651/
+      args:
+        chdir: /opt/pulsar
+      when: localzk[0] == inventory_hostname
+
+- name: Setup Bookkeeper
+  hosts: pulsar
+  connection: ssh
+  tags: setup
+  become: true
+  tasks:
+    - name: Configure zk string
+      lineinfile:
+        path: /opt/pulsar/conf/bookkeeper.conf
+        regexp: '^zkServers='
+        line: 'zkServers={{ hostvars[localzk[0]].instance_data.private_ip }}'
+    - name: Install bookkeeper systemd service
+      template:
+        src: "templates/bookkeeper.service.j2"
+        dest: "/etc/systemd/system/bookkeeper.service"
+    - systemd:
+        state: restarted
+        daemon_reload: yes
+        name: "bookkeeper"
+
+- name: Setup Pulsar
+  hosts: pulsar
+  connection: ssh
+  tags: setup
+  become: true
+  tasks:
+    - name: Set up broker
+      template:
+        src: "templates/broker.conf.j2"
+        dest: "/opt/pulsar/conf/broker.conf"
+    - template:
+        src: "templates/pulsar.service.j2"
+        dest: "/etc/systemd/system/pulsar.service"
+    - systemd:
+        state: restarted
+        daemon_reload: yes
+        name: "pulsar"
+
+- name: Teardown
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars_files:
+    - vars/gce.yaml
+    - vars/credentials.yaml
+  tasks:
+    - name: Kill instances
+      gce:
+        zone: "{{ zone }}"
+        instance_names: "{{ master_name }},{{ worker_names }}"
+        service_account_email: "{{ service_account_email }}"
+        credentials_file: "{{ credentials_file }}"
+        project_id: "{{ project_id }}"
+        state: absent
+      tags: teardown
