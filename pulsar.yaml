@@ -169,7 +169,7 @@
   tasks:
     - name: Configure zk string
       lineinfile:
-        path: /opt/pulsar/conf/bookkeeper.conf
+        dest: /opt/pulsar/conf/bookkeeper.conf
         regexp: '^zkServers='
         line: 'zkServers={{ hostvars[localzk[0]].instance_data.private_ip }}'
     - name: Install bookkeeper systemd service
