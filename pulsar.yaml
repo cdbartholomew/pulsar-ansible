@@ -31,7 +31,7 @@
       with_items: "{{ topology }}"
 
     - name: Wait for SSH to come up
-      wait_for: host={{ item.1.public_ip }} port=22 timeout=60
+      wait_for: host={{ item.1.public_ip }} port=22 timeout=120
       with_subelements:
         - "{{ nodes.results }}"
         - instance_data
