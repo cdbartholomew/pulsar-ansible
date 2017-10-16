@@ -7,3 +7,4 @@ topology:
     workers: zk1-us-central,pulsar1-us-central,pulsar2-us-central,pulsar3-us-central
 image: debian-9
 machine_type: n1-standard-2
+machine_preemptible: true

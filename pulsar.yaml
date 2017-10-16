@@ -10,7 +10,7 @@
       gce:
         zone: "{{ item.zone }}"
         instance_names: "{{ item.workers }}"
-        preemptible: true
+        preemptible: "{{ machine_preemptible }}"
         machine_type: "{{ machine_type }}"
         image: "{{ image }}"
         service_account_email: "{{ service_account_email }}"
