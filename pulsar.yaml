@@ -194,20 +194,16 @@
         daemon_reload: yes
         name: "pulsar"
 
-- name: Teardown
+- name: Print info
   hosts: localhost
   connection: local
   gather_facts: no
-  vars_files:
-    - vars/gce.yaml
-    - vars/credentials.yaml
   tasks:
-    - name: Kill instances
-      gce:
-        zone: "{{ zone }}"
-        instance_names: "{{ master_name }},{{ worker_names }}"
-        service_account_email: "{{ service_account_email }}"
-        credentials_file: "{{ credentials_file }}"
-        project_id: "{{ project_id }}"
-        state: absent
-      tags: teardown
+    - name: Host data
+      vars:
+        msg: |
+          {% for h in groups['all']|sort %}
+          {{ h }}, name={{ hostvars[h].instance_data.name }}, zone={{ hostvars[h].zone }}
+          {% endfor %}
+      debug:
+        msg: "{{ msg.split('\n') }}"
