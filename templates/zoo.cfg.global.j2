@@ -44,7 +44,7 @@ autopurge.snapRetainCount=3
 # Set to "0" to disable auto purge feature
 autopurge.purgeInterval=1
 
-{% for i in groups['zk'] %}
+{% for i in groups['globalzk'] %}
 server.{{ hostvars[i].zid }}={{ hostvars[i].instance_data.private_ip }}:2185:2186
 {% endfor %}
 

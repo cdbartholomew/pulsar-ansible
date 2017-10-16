@@ -1,10 +1,10 @@
 topology:
   - zone: europe-west1-b
-    workers: zk1-eu-west,pulsar1-eu-west,pulsar2-eu-west,pulsar3-eu-west
+    workers: zk1-eu-west,zk2-eu-west,zk3-eu-west,pulsar1-eu-west,pulsar2-eu-west,pulsar3-eu-west
   - zone: us-east1-c
-    workers: zk1-us-east,pulsar1-us-east,pulsar2-us-east,pulsar3-us-east
+    workers: zk1-us-east,zk2-us-east,zk3-us-east,pulsar1-us-east,pulsar2-us-east,pulsar3-us-east
   - zone: us-central1-c
-    workers: zk1-us-central,pulsar1-us-central,pulsar2-us-central,pulsar3-us-central
+    workers: zk1-us-central,zk2-us-central,zk3-us-central,pulsar1-us-central,pulsar2-us-central,pulsar3-us-central
 image: debian-9
 machine_type: n1-standard-2
 machine_preemptible: true

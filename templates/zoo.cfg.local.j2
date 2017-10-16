@@ -44,5 +44,7 @@ autopurge.snapRetainCount=3
 # Set to "0" to disable auto purge feature
 autopurge.purgeInterval=1
 
-server.{{ zid }}={{ instance_data.private_ip }}:2888:3888
+{% for i in groups[zone]|intersect(groups.zk) %}
+server.{{ hostvars[i].zid }}={{ hostvars[i].instance_data.private_ip }}:2888:3888
+{% endfor %}
 

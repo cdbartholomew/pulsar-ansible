@@ -48,6 +48,16 @@
         - instance_data
       when: item.1.name | match("zk.*")
 
+    - name: Add host to group (globalzk)
+      add_host:
+        hostname: "{{ item.1.public_ip }}"
+        groups:
+          - globalzk
+      with_subelements:
+        - "{{ nodes.results }}"
+        - instance_data
+      when: item.1.name | match("zk1.*")
+
     - name: Add host to group (pulsar)
       add_host:
         hostname: "{{ item.1.public_ip }}"
