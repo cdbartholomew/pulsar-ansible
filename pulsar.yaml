@@ -2,7 +2,6 @@
   hosts: localhost
   connection: local
   gather_facts: no
-  tags: setup
   vars_files:
     - vars/gce.yaml
     - vars/credentials.yaml
@@ -65,7 +64,6 @@
 - name: Common setup for all hosts
   hosts: all
   connection: ssh
-  tags: setup
   become: true
   tasks:
     - name: Install useful packages
@@ -113,7 +111,6 @@
 - name: Setup zookeeper
   hosts: zk
   connection: ssh
-  tags: setup
   become: true
   tasks:
     - set_fact:
@@ -164,7 +161,6 @@
 - name: Setup Bookkeeper
   hosts: pulsar
   connection: ssh
-  tags: setup
   become: true
   tasks:
     - name: Configure zk string
@@ -184,7 +180,6 @@
 - name: Setup Pulsar
   hosts: pulsar
   connection: ssh
-  tags: setup
   become: true
   tasks:
     - name: Set up broker
