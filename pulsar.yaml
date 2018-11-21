@@ -112,7 +112,7 @@
         path: "/opt/pulsar"
         state: directory
     - get_url:
-        url: http://apache.rediris.es/incubator/pulsar/pulsar-1.20.0-incubating/apache-pulsar-1.20.0-incubating-bin.tar.gz
+        url: http://apache.rediris.es/pulsar/pulsar-2.2.0/apache-pulsar-2.2.0-bin.tar.gz
         dest: /tmp/pulsar.tgz
     - command: tar --strip-components=1 -xvf /tmp/pulsar.tgz
       args:
